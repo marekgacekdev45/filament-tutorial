@@ -18,6 +18,11 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\ConferenceResource\Pages;
 use App\Filament\Resources\ConferenceResource\RelationManagers;
 
+use App\Actions\Star;
+use App\Actions\ResetStars;
+use Filament\Forms\Components\Actions;
+use Filament\Forms\Components\Actions\Action;
+
 class ConferenceResource extends Resource
 {
     protected static ?string $model = Conference::class;
@@ -97,7 +102,26 @@ class ConferenceResource extends Resource
                                 ->options(
                                     Speaker::all()->pluck('name', 'id')
                                 ),
-
+                                Actions::make([
+                                    Action::make('star')
+                                    ->visible(function(string $operation){
+                                        if($operation !== 'create'){
+                                            return false;
+                                        }
+                                        if(! app()->environment('local')){
+                                            return false;
+                                        }
+                                        return true;
+                                    })
+                                    ->label('Fill with factory Data')
+                                        ->icon('heroicon-m-star')
+                                        ->action(function ($livewire) {
+                                          $data = Conference::factory()->make()->toArray();
+                                         
+                                          $livewire->form->fill($data);
+                                        }),
+                                   
+                                ]),
             ]);
     }
 
@@ -130,7 +154,10 @@ class ConferenceResource extends Resource
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+                 
             ])
+            
+            
             ->filters([
                 //
             ])
