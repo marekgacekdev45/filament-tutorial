@@ -3,25 +3,31 @@
 namespace App\Filament\Resources;
 
 use Filament\Forms;
+use App\Models\Talk;
 use Filament\Tables;
+use App\Actions\Star;
 use App\Enums\Region;
 use App\Models\Venue;
 use App\Models\Speaker;
 use Filament\Forms\Form;
 use App\Models\Conference;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use App\Actions\ResetStars;
+use App\Enums\TalkStatus;
 use Filament\Resources\Resource;
+use Filament\Forms\Components\Actions;
 use Filament\Forms\Components\Section;
 use Illuminate\Database\Eloquent\Builder;
+
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Actions\Action;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\ConferenceResource\Pages;
 use App\Filament\Resources\ConferenceResource\RelationManagers;
-
-use App\Actions\Star;
-use App\Actions\ResetStars;
-use Filament\Forms\Components\Actions;
-use Filament\Forms\Components\Actions\Action;
+use Filament\Actions\ActionGroup;
+use Filament\Notifications\Notification;
+use Filament\Tables\Filters\TernaryFilter;
 
 class ConferenceResource extends Resource
 {
@@ -32,10 +38,11 @@ class ConferenceResource extends Resource
     public static function form(Form $form): Form
     {
         return $form
+
             ->schema([
                 Section::make('Conference Details')
-                ->collapsible()
-                ->description('info')
+                    ->collapsible()
+                    ->description('info')
                     ->columns(2)
                     ->schema([
                         Forms\Components\TextInput::make('name')
@@ -55,7 +62,7 @@ class ConferenceResource extends Resource
                         // ->prefixIcon('heroicon-o-globe-alt'),
                         Forms\Components\RichEditor::make('description')
                             // ->columnSpan(2)
-                            ->columnSpan(['md'=>1,'lg'=>2])
+                            ->columnSpan(['md' => 1, 'lg' => 2])
                             ->required()
                             ->disableToolbarButtons([''])
                             ->helperText('Hello'),
@@ -65,69 +72,72 @@ class ConferenceResource extends Resource
                         Forms\Components\DateTimePicker::make('end_date')
                             ->native(false)
                             ->required(),
-                            Forms\Components\FieldSet::make('Status')
+                        Forms\Components\FieldSet::make('Status')
                             ->columns(2)
                             ->schema([
                                 Forms\Components\Select::make('status')
-                                ->required()
-                                ->options([
-                                    'draft' => "Draft",
-                                    'published' => "Published",
-                                    'archived' => "Archived",
-            
-                                ]),
-            
-                          
+                                    ->required()
+                                    ->options([
+                                        'draft' => "Draft",
+                                        'published' => "Published",
+                                        'archived' => "Archived",
+
+                                    ]),
+
+
                             ]),
                     ]),
                 Section::make('Location')
-                ->columns(2)
-                ->schema([
-                    
-                    Forms\Components\Select::make('region')
-                        ->live()
-                        ->enum(Region::class)
-                        ->options(Region::class),
-                    Forms\Components\Select::make('venue_id')
-                        ->searchable()
-                        ->preload()
-                        ->editOptionForm(Venue::getForm())
-                        ->createOptionForm(Venue::getForm())
-                        ->relationship('venue', 'name', modifyQueryUsing: function (Builder $query, Forms\Get $get) {
-                            return $query->where('region', $get('region'));
-                        }),
-                ]),
+                    ->columns(2)
+                    ->schema([
+
+                        Forms\Components\Select::make('region')
+                            ->live()
+                            ->enum(Region::class)
+                            ->options(Region::class),
+                        Forms\Components\Select::make('venue_id')
+                            ->searchable()
+                            ->preload()
+                            ->editOptionForm(Venue::getForm())
+                            ->createOptionForm(Venue::getForm())
+                            ->relationship('venue', 'name', modifyQueryUsing: function (Builder $query, Forms\Get $get) {
+                                return $query->where('region', $get('region'));
+                            }),
+                    ]),
                 Forms\Components\CheckboxList::make('speakers')
-                                ->relationship('speakers', 'name')
-                                ->options(
-                                    Speaker::all()->pluck('name', 'id')
-                                ),
-                                Actions::make([
-                                    Action::make('star')
-                                    ->visible(function(string $operation){
-                                        if($operation !== 'create'){
-                                            return false;
-                                        }
-                                        if(! app()->environment('local')){
-                                            return false;
-                                        }
-                                        return true;
-                                    })
-                                    ->label('Fill with factory Data')
-                                        ->icon('heroicon-m-star')
-                                        ->action(function ($livewire) {
-                                          $data = Conference::factory()->make()->toArray();
-                                         
-                                          $livewire->form->fill($data);
-                                        }),
-                                   
-                                ]),
+                    ->relationship('speakers', 'name')
+                    ->options(
+                        Speaker::all()->pluck('name', 'id')
+                    ),
+                Actions::make([
+                    Action::make('star')
+                        ->visible(function (string $operation) {
+                            if ($operation !== 'create') {
+                                return false;
+                            }
+                            if (!app()->environment('local')) {
+                                return false;
+                            }
+                            return true;
+                        })
+                        ->label('Fill with factory Data')
+                        ->icon('heroicon-m-star')
+                        ->action(function ($livewire) {
+                            $data = Conference::factory()->make()->toArray();
+
+                            $livewire->form->fill($data);
+                        }),
+
+                ]),
             ]);
     }
 
     public static function table(Table $table): Table
     {
         return $table
+            ->filtersTriggerAction(function ($action) {
+                return $action->button()->label('Filters');
+            })
             ->columns([
                 Tables\Columns\TextColumn::make('name')
                     ->searchable(),
@@ -154,20 +164,77 @@ class ConferenceResource extends Resource
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                 
+
             ])
-            
-            
+
+
             ->filters([
-                //
+                TernaryFilter::make('new_talk'),
+                //                 Tables\Filters\SelectFilter::make('speaker')->relationship('speaker', 'name')
+                //                     ->multiple()
+                //                     ->searchable()
+                //                     ->preload()
+                //                     ->query(function ($query)){
+                //                         return $query->whereHas('speaker', function (Builder $query){
+                // $query->whereNotNull('avatar');
+                //                         });
+                //                     }
+
+
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\ActionGroup::make([
+                    Tables\Actions\EditAction::make()
+                        ->slideOver(),
+                    Tables\Actions\Action::make('aprove')
+                        ->visible(function ($record) {
+                            return $record->status === (TalkStatus::APPROVED);
+                        })
+                        ->icon('heroicon-o-check-circle')
+                        ->color('success')
+                        ->requiresConfirmation()
+                        ->action(function (Talk $record) {
+                            $record->approve();
+                        })->after(function () {
+                            Notification::make()->success()->title('This talk was approved')
+
+                                ->duration(3000)
+                                ->body('The speaker has been notified')
+                                ->send();
+                        }),
+                    Tables\Actions\EditAction::make()
+                        ->slideOver(),
+                    Tables\Actions\Action::make('aprove')
+                        ->icon('heroicon-o-check-circle')
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->action(function (Talk $record) {
+                            $record->approve();
+                        })->after(function () {
+                            Notification::make()->success()->title('This talk was approved')
+
+                                ->duration(3000)
+                                ->body('The speaker has been notified')
+                                ->send();
+                        }),
+                ]),
+
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
                     Tables\Actions\DeleteBulkAction::make(),
+                    Tables\Actions\BulkAction::make('approve')
+                        ->action(function (Collection $records) {
+                            $records->each->approve();
+                        })
                 ]),
+            ])
+            ->headerActions([
+                Tables\Actions\Action::make('export')
+                    ->tooltip('This will export all visible records')
+                    ->action(function () {
+                        echo $livewire->getFilteredTableQuery();
+                    })
             ]);
     }
 
@@ -183,7 +250,7 @@ class ConferenceResource extends Resource
         return [
             'index' => Pages\ListConferences::route('/'),
             'create' => Pages\CreateConference::route('/create'),
-            'edit' => Pages\EditConference::route('/{record}/edit'),
+            // 'edit' => Pages\EditConference::route('/{record}/edit'),
         ];
     }
 }

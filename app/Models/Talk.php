@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\TalkStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,5 +25,13 @@ class Talk extends Model
     public function conferences(): BelongsToMany
     {
         return $this->belongsToMany(Conference::class);
+    }
+
+    public function approve():void{
+        $this->status = TalkStatus::APPROVED;
+
+        //email the speaker telling
+        
+        $this->save;
     }
 }
